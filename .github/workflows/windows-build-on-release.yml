@@ -1,0 +1,314 @@
+name: Release Build
+
+on:
+  release:
+    types: [created, published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., 1.0.0)'
+        required: true
+        default: '1.0.0'
+
+env:
+  QT_VERSION: '6.5.3'
+  BUILD_TYPE: Release
+
+jobs:
+  build-windows-installer:
+    name: Build Windows Installer
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+    
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v3
+      with:
+        version: ${{ env.QT_VERSION }}
+        arch: win64_msvc2019_64
+        modules: 'qtbase qttools'
+        cache: true
+    
+    - name: Setup MSVC
+      uses: microsoft/setup-msbuild@v1.1
+    
+    - name: Install vcpkg dependencies
+      run: |
+        vcpkg install openssl:x64-windows
+        vcpkg install tesseract:x64-windows
+    
+    - name: Install WiX Toolset
+      run: |
+        choco install wixtoolset
+    
+    - name: Configure CMake
+      run: |
+        cmake -B build `
+          -G "Visual Studio 17 2022" `
+          -A x64 `
+          -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} `
+          -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake" `
+          -DBUILD_GUI=ON `
+          -DBUILD_CLI=ON `
+          -DBUILD_TESTS=OFF
+    
+    - name: Build
+      run: cmake --build build --config ${{ env.BUILD_TYPE }} --parallel
+    
+    - name: Run Qt Deploy Tool
+      run: |
+        cd build/bin/${{ env.BUILD_TYPE }}
+        windeployqt pdfeditor.exe
+    
+    - name: Create installer
+      working-directory: build
+      run: cpack -G WIX -C ${{ env.BUILD_TYPE }}
+    
+    - name: Create ZIP archive
+      working-directory: build
+      run: cpack -G ZIP -C ${{ env.BUILD_TYPE }}
+    
+    - name: Upload installer to release
+      uses: softprops/action-gh-release@v1
+      if: github.event_name == 'release'
+      with:
+        files: |
+          build/*.msi
+          build/*.zip
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: windows-installer
+        path: |
+          build/*.msi
+          build/*.zip
+
+  build-macos-dmg:
+    name: Build macOS DMG
+    runs-on: macos-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+    
+    - name: Install dependencies
+      run: |
+        brew install \
+          cmake ninja tesseract openssl@3 \
+          create-dmg
+    
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v3
+      with:
+        version: ${{ env.QT_VERSION }}
+        modules: 'qtbase qttools'
+        cache: true
+    
+    - name: Configure CMake
+      run: |
+        cmake -B build \
+          -G Ninja \
+          -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+          -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64" \
+          -DOpenSSL_ROOT=/usr/local/opt/openssl@3 \
+          -DBUILD_GUI=ON \
+          -DBUILD_CLI=ON \
+          -DBUILD_TESTS=OFF
+    
+    - name: Build
+      run: cmake --build build --parallel
+    
+    - name: Create app bundle
+      run: |
+        cd build
+        macdeployqt bin/pdfeditor.app -dmg
+    
+    - name: Create DMG with custom background
+      run: |
+        cd build
+        cpack -G DragNDrop
+    
+    - name: Sign DMG (if certificates available)
+      if: env.MACOS_CERTIFICATE != ''
+      run: |
+        # Sign the DMG with developer certificate
+        codesign --force --sign "Developer ID Application" build/*.dmg
+      env:
+        MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+    
+    - name: Notarize DMG (if credentials available)
+      if: env.APPLE_ID != ''
+      run: |
+        xcrun notarytool submit build/*.dmg \
+          --apple-id "${{ secrets.APPLE_ID }}" \
+          --password "${{ secrets.APPLE_PASSWORD }}" \
+          --team-id "${{ secrets.APPLE_TEAM_ID }}" \
+          --wait
+      env:
+        APPLE_ID: ${{ secrets.APPLE_ID }}
+    
+    - name: Upload DMG to release
+      uses: softprops/action-gh-release@v1
+      if: github.event_name == 'release'
+      with:
+        files: build/*.dmg
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: macos-dmg
+        path: build/*.dmg
+
+  build-linux-packages:
+    name: Build Linux Packages
+    runs-on: ubuntu-22.04
+    
+    strategy:
+      matrix:
+        package: [deb, rpm, appimage]
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          cmake ninja-build \
+          libgl1-mesa-dev libtesseract-dev libssl-dev \
+          rpm alien fuse libfuse2
+    
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v3
+      with:
+        version: ${{ env.QT_VERSION }}
+        cache: true
+    
+    - name: Configure CMake
+      run: |
+        cmake -B build \
+          -G Ninja \
+          -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+          -DCMAKE_INSTALL_PREFIX=/usr \
+          -DBUILD_GUI=ON \
+          -DBUILD_CLI=ON \
+          -DBUILD_TESTS=OFF
+    
+    - name: Build
+      run: cmake --build build --parallel
+    
+    - name: Install to staging directory
+      run: DESTDIR=build/staging cmake --install build
+    
+    - name: Create DEB package
+      if: matrix.package == 'deb'
+      run: |
+        cd build
+        cpack -G DEB
+    
+    - name: Create RPM package
+      if: matrix.package == 'rpm'
+      run: |
+        sudo apt-get install -y rpm
+        cd build
+        cpack -G RPM
+    
+    - name: Create AppImage
+      if: matrix.package == 'appimage'
+      run: |
+        wget https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+        wget https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
+        chmod +x linuxdeploy*.AppImage
+        
+        ./linuxdeploy-x86_64.AppImage \
+          --appdir AppDir \
+          --executable build/bin/pdfeditor \
+          --desktop-file resources/pdfeditor.desktop \
+          --icon-file resources/icon.png \
+          --plugin qt \
+          --output appimage
+    
+    - name: Upload to release
+      uses: softprops/action-gh-release@v1
+      if: github.event_name == 'release'
+      with:
+        files: |
+          build/*.deb
+          build/*.rpm
+          *.AppImage
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: linux-${{ matrix.package }}
+        path: |
+          build/*.deb
+          build/*.rpm
+          *.AppImage
+
+  create-source-archive:
+    name: Create Source Archive
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+    
+    - name: Create source tarball
+      run: |
+        version="${{ github.event.inputs.version || github.ref_name }}"
+        tar -czf "PDFEditor-${version}-source.tar.gz" \
+          --exclude='.git' \
+          --exclude='build' \
+          --exclude='.github' \
+          .
+    
+    - name: Upload to release
+      uses: softprops/action-gh-release@v1
+      if: github.event_name == 'release'
+      with:
+        files: PDFEditor-*-source.tar.gz
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-release-notes:
+    name: Publish Release Notes
+    runs-on: ubuntu-latest
+    needs: [build-windows-installer, build-macos-dmg, build-linux-packages]
+    if: github.event_name == 'release'
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Generate changelog
+      id: changelog
+      run: |
+        echo "Generating changelog from commits..."
+        git log --pretty=format:"- %s (%h)" $(git describe --tags --abbrev=0 HEAD^)..HEAD > CHANGELOG.md
+    
+    - name: Update release body
+      uses: softprops/action-gh-release@v1
+      with:
+        body_path: CHANGELOG.md
+        append_body: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
