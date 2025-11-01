@@ -1,41 +1,174 @@
-# Prerequisites
-*.d
-
-# Compiled Object files
-*.slo
-*.lo
+# Build directories
+build/
+build-*/
+cmake-build-*/
+out/
+bin/
+lib/
 *.o
-*.obj
-
-# Precompiled Headers
-*.gch
-*.pch
-
-# Linker files
-*.ilk
-
-# Debugger Files
-*.pdb
-
-# Compiled Dynamic libraries
+*.a
 *.so
+*.so.*
 *.dylib
 *.dll
-
-# Fortran module files
-*.mod
-*.smod
-
-# Compiled Static libraries
-*.lai
-*.la
-*.a
-*.lib
-
-# Executables
 *.exe
-*.out
 *.app
 
-# debug information files
-*.dwo
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+Makefile
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+_deps/
+
+# Qt generated files
+moc_*.cpp
+moc_*.h
+ui_*.h
+qrc_*.cpp
+*.qm
+.qmake.stash
+*.pro.user
+*.pro.user.*
+
+# IDE and editor files
+.vscode/
+.vs/
+.idea/
+*.swp
+*.swo
+*.swn
+*~
+.DS_Store
+*.sublime-project
+*.sublime-workspace
+*.code-workspace
+
+# Visual Studio
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+.vs/
+x64/
+Debug/
+Release/
+*.opensdf
+*.sdf
+*.suo
+*.user
+*.aps
+*.pch
+*.vspscc
+*.vssscc
+ipch/
+*.ncb
+
+# Xcode
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+DerivedData/
+
+# Test results and coverage
+Testing/
+*.log
+*.tlog
+*.gcda
+*.gcno
+*.gcov
+coverage/
+*.coverage
+htmlcov/
+.pytest_cache/
+test_output/
+
+# Package managers
+conan/
+vcpkg_installed/
+packages/
+
+# Documentation generated
+docs/_build/
+docs/html/
+docs/latex/
+*.pdf
+doxygen_output/
+
+# Temporary and backup files
+*.tmp
+*.temp
+*.bak
+*.backup
+*.orig
+*.rej
+*~
+\#*\#
+
+# OS specific
+Thumbs.db
+Desktop.ini
+.Spotlight-V100
+.Trashes
+._*
+
+# Logs
+*.log
+logs/
+
+# Distribution packages
+*.deb
+*.rpm
+*.dmg
+*.msi
+*.pkg
+*.tar.gz
+*.zip
+dist/
+*.AppImage
+
+# Python (for scripts)
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# Third-party libraries (if not using submodules)
+third_party/*/
+
+# User-specific files
+.user.ini
+config.local
+secrets.txt
+*.key
+*.pem
+*.p12
+*.pfx
+
+# Profiling data
+*.prof
+perf.data
+callgrind.out.*
+massif.out.*
+
+# Valgrind
+vgcore.*
+*.memcheck
+
+# Core dumps
+core
+core.*
+*.core
+
+# Local configuration
+.env
+.env.local
+local_config.cmake
