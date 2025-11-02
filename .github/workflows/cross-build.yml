@@ -41,7 +41,7 @@ jobs:
           libgumbo-dev
     
     - name: Install Qt
-      uses: jurplel/install-qt-action@v3
+      uses: jurplel/install-qt-action@v4
       with:
         version: ${{ env.QT_VERSION }}
         cache: true
@@ -64,20 +64,22 @@ jobs:
       run: ctest --output-on-failure --parallel $(nproc)
     
     - name: Upload build artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: linux-build
         path: |
           build/bin/
           build/lib/
+        retention-days: 7
     
     - name: Upload test logs
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: failure()
       with:
         name: linux-test-logs
         path: build/Testing/Temporary/
+        retention-days: 14
 
   build-windows:
     name: Build on Windows
@@ -90,7 +92,7 @@ jobs:
         submodules: recursive
     
     - name: Install Qt
-      uses: jurplel/install-qt-action@v3
+      uses: jurplel/install-qt-action@v4
       with:
         version: ${{ env.QT_VERSION }}
         cache: true
@@ -98,7 +100,7 @@ jobs:
         modules: 'qtbase qttools'
     
     - name: Setup MSVC
-      uses: microsoft/setup-msbuild@v1.1
+      uses: microsoft/setup-msbuild@v2
     
     - name: Install vcpkg dependencies
       run: |
@@ -124,20 +126,22 @@ jobs:
       run: ctest -C ${{ env.BUILD_TYPE }} --output-on-failure --parallel
     
     - name: Upload build artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: windows-build
         path: |
           build/bin/${{ env.BUILD_TYPE }}/
           build/lib/${{ env.BUILD_TYPE }}/
+        retention-days: 7
     
     - name: Upload test logs
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: failure()
       with:
         name: windows-test-logs
         path: build/Testing/Temporary/
+        retention-days: 14
 
   build-macos:
     name: Build on macOS
@@ -164,7 +168,7 @@ jobs:
           gumbo-parser
     
     - name: Install Qt
-      uses: jurplel/install-qt-action@v3
+      uses: jurplel/install-qt-action@v4
       with:
         version: ${{ env.QT_VERSION }}
         cache: true
@@ -195,7 +199,7 @@ jobs:
         cpack -G DragNDrop
     
     - name: Upload build artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: macos-build
@@ -203,13 +207,15 @@ jobs:
           build/bin/
           build/lib/
           build/*.dmg
+        retention-days: 7
     
     - name: Upload test logs
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: failure()
       with:
         name: macos-test-logs
         path: build/Testing/Temporary/
+        retention-days: 14
 
   code-quality:
     name: Code Quality Checks
@@ -257,10 +263,11 @@ jobs:
       run: doxygen Doxyfile
     
     - name: Upload documentation
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: documentation
         path: docs/html/
+        retention-days: 30
 
   coverage:
     name: Code Coverage
@@ -280,7 +287,7 @@ jobs:
           libgl1-mesa-dev libtesseract-dev libssl-dev
     
     - name: Install Qt
-      uses: jurplel/install-qt-action@v3
+      uses: jurplel/install-qt-action@v4
       with:
         version: ${{ env.QT_VERSION }}
         cache: true
@@ -308,8 +315,9 @@ jobs:
         lcov --list coverage.info
     
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v4
       with:
         files: ./coverage.info
         flags: unittests
         name: codecov-umbrella
+        token: ${{ secrets.CODECOV_TOKEN }}
