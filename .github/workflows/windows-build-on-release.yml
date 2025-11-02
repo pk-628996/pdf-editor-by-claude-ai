@@ -33,7 +33,6 @@ jobs:
         target: 'desktop'
         arch: 'win64_msvc2019_64'
         cache: true
-        # Don't specify modules - use default installation
     
     - name: Setup MSVC
       uses: microsoft/setup-msbuild@v2
@@ -44,8 +43,7 @@ jobs:
         vcpkg install tesseract:x64-windows
     
     - name: Install WiX Toolset
-      run: |
-        choco install wixtoolset
+      run: choco install wixtoolset -y
     
     - name: Configure CMake
       run: |
@@ -105,9 +103,7 @@ jobs:
     
     - name: Install dependencies
       run: |
-        brew install \
-          cmake ninja tesseract openssl@3 \
-          create-dmg
+        brew install cmake ninja tesseract openssl@3 create-dmg
     
     - name: Install Qt
       uses: jurplel/install-qt-action@v4
@@ -142,23 +138,34 @@ jobs:
         cpack -G DragNDrop
     
     - name: Sign DMG (if certificates available)
-      if: secrets.MACOS_CERTIFICATE != ''
-      run: |
-        # Sign the DMG with developer certificate
-        codesign --force --sign "Developer ID Application" build/*.dmg
+      if: ${{ secrets.MACOS_CERTIFICATE != '' }}
       env:
         MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
-    
-    - name: Notarize DMG (if credentials available)
-      if: secrets.APPLE_ID != ''
       run: |
-        xcrun notarytool submit build/*.dmg \
-          --apple-id "${{ secrets.APPLE_ID }}" \
-          --password "${{ secrets.APPLE_PASSWORD }}" \
-          --team-id "${{ secrets.APPLE_TEAM_ID }}" \
-          --wait
+        if [ -n "${MACOS_CERTIFICATE}" ]; then
+          echo "Signing DMG..."
+          codesign --force --sign "Developer ID Application" build/*.dmg
+        else
+          echo "No macOS certificate found, skipping signing."
+        fi
+
+    - name: Notarize DMG (if credentials available)
+      if: ${{ secrets.APPLE_ID != '' }}
       env:
         APPLE_ID: ${{ secrets.APPLE_ID }}
+        APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+        APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      run: |
+        if [ -n "${APPLE_ID}" ]; then
+          echo "Submitting for notarization..."
+          xcrun notarytool submit build/*.dmg \
+            --apple-id "${APPLE_ID}" \
+            --password "${APPLE_PASSWORD}" \
+            --team-id "${APPLE_TEAM_ID}" \
+            --wait
+        else
+          echo "No Apple ID provided, skipping notarization."
+        fi
     
     - name: Upload DMG to release
       uses: softprops/action-gh-release@v2
@@ -285,13 +292,11 @@ jobs:
       run: |
         version="${{ github.event.inputs.version || github.ref_name }}"
         
-        # Use git archive instead of tar to avoid "file changed" errors
         git archive --format=tar.gz \
           --prefix=PDFEditor-${version}/ \
           -o "PDFEditor-${version}-source.tar.gz" \
           HEAD
         
-        # Verify the archive was created
         ls -lh "PDFEditor-${version}-source.tar.gz"
     
     - name: Upload to release
@@ -319,25 +324,21 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
       with:
-        fetch-depth: 0  # Need full history for changelog
+        fetch-depth: 0
     
     - name: Generate changelog
       id: changelog
       run: |
         echo "Generating changelog from commits..."
         
-        # Get previous tag
         PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
         
         if [ -z "$PREV_TAG" ]; then
-          # First release - get all commits
           git log --pretty=format:"- %s (%h)" > CHANGELOG.md
         else
-          # Get commits since previous tag
           git log --pretty=format:"- %s (%h)" ${PREV_TAG}..HEAD > CHANGELOG.md
         fi
         
-        # Add header
         echo "## Changes in this release" > CHANGELOG_TEMP.md
         echo "" >> CHANGELOG_TEMP.md
         cat CHANGELOG.md >> CHANGELOG_TEMP.md
