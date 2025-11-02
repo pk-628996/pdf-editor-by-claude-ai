@@ -137,8 +137,8 @@ jobs:
         cd build
         cpack -G DragNDrop
     
+    # --- Fixed Secret Handling (no YAML if:) ---
     - name: Sign DMG (if certificates available)
-      if: ${{ secrets.MACOS_CERTIFICATE != '' }}
       env:
         MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
       run: |
@@ -150,7 +150,6 @@ jobs:
         fi
 
     - name: Notarize DMG (if credentials available)
-      if: ${{ secrets.APPLE_ID != '' }}
       env:
         APPLE_ID: ${{ secrets.APPLE_ID }}
         APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
@@ -166,7 +165,8 @@ jobs:
         else
           echo "No Apple ID provided, skipping notarization."
         fi
-    
+    # --------------------------------------------
+
     - name: Upload DMG to release
       uses: softprops/action-gh-release@v2
       if: github.event_name == 'release'
@@ -286,17 +286,15 @@ jobs:
       uses: actions/checkout@v4
       with:
         submodules: recursive
-        fetch-depth: 0  # Full history for proper git archive
+        fetch-depth: 0
     
     - name: Create source tarball
       run: |
         version="${{ github.event.inputs.version || github.ref_name }}"
-        
         git archive --format=tar.gz \
           --prefix=PDFEditor-${version}/ \
           -o "PDFEditor-${version}-source.tar.gz" \
           HEAD
-        
         ls -lh "PDFEditor-${version}-source.tar.gz"
     
     - name: Upload to release
@@ -330,15 +328,12 @@ jobs:
       id: changelog
       run: |
         echo "Generating changelog from commits..."
-        
         PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-        
         if [ -z "$PREV_TAG" ]; then
           git log --pretty=format:"- %s (%h)" > CHANGELOG.md
         else
           git log --pretty=format:"- %s (%h)" ${PREV_TAG}..HEAD > CHANGELOG.md
         fi
-        
         echo "## Changes in this release" > CHANGELOG_TEMP.md
         echo "" >> CHANGELOG_TEMP.md
         cat CHANGELOG.md >> CHANGELOG_TEMP.md
