@@ -15,53 +15,56 @@ if(PKG_CONFIG_FOUND)
     pkg_check_modules(PC_MuPDF QUIET mupdf)
 endif()
 
+# Check for MuPDF_ROOT hint
+if(MuPDF_ROOT)
+    set(MuPDF_SEARCH_PATHS ${MuPDF_ROOT})
+else()
+    set(MuPDF_SEARCH_PATHS
+        ${PC_MuPDF_INCLUDE_DIRS}
+        ${CMAKE_SOURCE_DIR}/third_party/mupdf
+        ${CMAKE_SOURCE_DIR}/mupdf
+        $ENV{MUPDF_DIR}
+        /usr
+        /usr/local
+        /opt/local
+    )
+endif()
+
 # Find the include directory
 find_path(MuPDF_INCLUDE_DIR
     NAMES mupdf/fitz.h
-    PATHS
-        ${PC_MuPDF_INCLUDE_DIRS}
-        ${CMAKE_SOURCE_DIR}/third_party/mupdf/include
-        /usr/include
-        /usr/local/include
-        /opt/local/include
-    PATH_SUFFIXES mupdf
+    HINTS ${MuPDF_SEARCH_PATHS}
+    PATH_SUFFIXES include
+    DOC "MuPDF include directory"
 )
 
 # Find the main library
 find_library(MuPDF_LIBRARY
     NAMES mupdf libmupdf
-    PATHS
-        ${PC_MuPDF_LIBRARY_DIRS}
-        ${CMAKE_SOURCE_DIR}/third_party/mupdf/build/release
-        ${CMAKE_SOURCE_DIR}/third_party/mupdf/build
-        /usr/lib
-        /usr/local/lib
-        /opt/local/lib
-    PATH_SUFFIXES lib lib64
+    HINTS ${MuPDF_SEARCH_PATHS}
+    PATH_SUFFIXES lib lib64 platform/win32/x64/Release platform/win32/x64/Debug
+    DOC "MuPDF library"
 )
 
-# Find additional MuPDF libraries
+# Find third-party library (contains dependencies like zlib, jpeg, etc.)
 find_library(MuPDF_THIRD_LIBRARY
-    NAMES mupdf-third libmupdf-third mupdfthird
-    PATHS
-        ${PC_MuPDF_LIBRARY_DIRS}
-        ${CMAKE_SOURCE_DIR}/third_party/mupdf/build/release
-        ${CMAKE_SOURCE_DIR}/third_party/mupdf/build
-        /usr/lib
-        /usr/local/lib
-        /opt/local/lib
-    PATH_SUFFIXES lib lib64
+    NAMES mupdf-third libmupdf-third mupdfthird thirdparty libthirdparty
+    HINTS ${MuPDF_SEARCH_PATHS}
+    PATH_SUFFIXES lib lib64 platform/win32/x64/Release platform/win32/x64/Debug
+    DOC "MuPDF third-party library"
 )
 
 # Try to extract version from header
 if(MuPDF_INCLUDE_DIR)
-    file(STRINGS "${MuPDF_INCLUDE_DIR}/mupdf/fitz/version.h" 
-         MuPDF_VERSION_LINE 
-         REGEX "^#define[\t ]+FZ_VERSION[\t ]+\".*\"")
-    
-    if(MuPDF_VERSION_LINE)
-        string(REGEX REPLACE "^#define[\t ]+FZ_VERSION[\t ]+\"([^\"]*)\".*" "\\1"
-               MuPDF_VERSION "${MuPDF_VERSION_LINE}")
+    if(EXISTS "${MuPDF_INCLUDE_DIR}/mupdf/fitz/version.h")
+        file(STRINGS "${MuPDF_INCLUDE_DIR}/mupdf/fitz/version.h" 
+             MuPDF_VERSION_LINE 
+             REGEX "^#define[\t ]+FZ_VERSION[\t ]+\".*\"")
+        
+        if(MuPDF_VERSION_LINE)
+            string(REGEX REPLACE "^#define[\t ]+FZ_VERSION[\t ]+\"([^\"]*)\".*" "\\1"
+                   MuPDF_VERSION "${MuPDF_VERSION_LINE}")
+        endif()
     endif()
 endif()
 
@@ -73,6 +76,8 @@ find_package_handle_standard_args(MuPDF
         MuPDF_INCLUDE_DIR
     VERSION_VAR
         MuPDF_VERSION
+    FAIL_MESSAGE
+        "Could not find MuPDF library. Set MuPDF_ROOT to the installation directory."
 )
 
 if(MuPDF_FOUND)
@@ -99,11 +104,26 @@ if(MuPDF_FOUND)
             )
         endif()
         
-        # MuPDF requires these system libraries
-        if(UNIX AND NOT APPLE)
+        # Windows-specific libraries
+        if(WIN32)
             set_target_properties(MuPDF::MuPDF PROPERTIES
-                INTERFACE_LINK_LIBRARIES "m;pthread"
+                INTERFACE_LINK_LIBRARIES "${MuPDF_THIRD_LIBRARY};advapi32;comdlg32;gdi32;user32;shell32"
             )
+        # Unix-specific libraries
+        elseif(UNIX)
+            set_target_properties(MuPDF::MuPDF PROPERTIES
+                INTERFACE_LINK_LIBRARIES "${MuPDF_THIRD_LIBRARY};m;pthread"
+            )
+        endif()
+    endif()
+    
+    # Debug output
+    if(NOT MuPDF_FIND_QUIETLY)
+        message(STATUS "Found MuPDF: ${MuPDF_LIBRARY}")
+        message(STATUS "  Version: ${MuPDF_VERSION}")
+        message(STATUS "  Include: ${MuPDF_INCLUDE_DIR}")
+        if(MuPDF_THIRD_LIBRARY)
+            message(STATUS "  Third-party lib: ${MuPDF_THIRD_LIBRARY}")
         endif()
     endif()
 endif()
