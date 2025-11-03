@@ -110,7 +110,36 @@ jobs:
       run: |
         vcpkg install openssl:x64-windows
         vcpkg install tesseract:x64-windows
-        vcpkg install mupdf:x64-windows
+    
+    - name: Cache MuPDF build
+      id: cache-mupdf
+      uses: actions/cache@v4
+      with:
+        path: ${{ github.workspace }}\mupdf-install
+        key: mupdf-windows-1.24.x-${{ runner.os }}
+    
+    - name: Build MuPDF from source
+      if: steps.cache-mupdf.outputs.cache-hit != 'true'
+      shell: pwsh
+      run: |
+        Write-Host "Building MuPDF from source..."
+        .\scripts\build_mupdf_windows.ps1 -InstallDir "$env:GITHUB_WORKSPACE\mupdf-install" -Verbose
+    
+    - name: Verify MuPDF installation
+      shell: pwsh
+      run: |
+        if (Test-Path "$env:GITHUB_WORKSPACE\mupdf-install\lib\libmupdf.lib") {
+          Write-Host "✓ MuPDF library found" -ForegroundColor Green
+        } else {
+          Write-Error "MuPDF library not found!"
+          exit 1
+        }
+        if (Test-Path "$env:GITHUB_WORKSPACE\mupdf-install\include\mupdf\fitz.h") {
+          Write-Host "✓ MuPDF headers found" -ForegroundColor Green
+        } else {
+          Write-Error "MuPDF headers not found!"
+          exit 1
+        }
     
     - name: Configure CMake
       run: |
@@ -119,6 +148,7 @@ jobs:
           -A x64 `
           -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} `
           -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake" `
+          -DMuPDF_ROOT="$env:GITHUB_WORKSPACE\mupdf-install" `
           -DBUILD_GUI=ON `
           -DBUILD_CLI=ON `
           -DBUILD_TESTS=ON `
