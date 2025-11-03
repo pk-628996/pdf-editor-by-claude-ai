@@ -94,6 +94,23 @@ jobs:
       with:
         submodules: recursive
     
+    - name: Add MSBuild to PATH
+      uses: microsoft/setup-msbuild@v2
+    
+    - name: Setup MSVC Developer Command Prompt
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: x64
+    
+    - name: Verify build tools
+      shell: pwsh
+      run: |
+        Write-Host "Checking for nmake..."
+        Get-Command nmake -ErrorAction Stop
+        Write-Host "Checking for cl (MSVC compiler)..."
+        Get-Command cl -ErrorAction Stop
+        Write-Host "All build tools found!" -ForegroundColor Green
+    
     - name: Install Qt
       uses: jurplel/install-qt-action@v4
       with:
@@ -102,9 +119,6 @@ jobs:
         target: 'desktop'
         arch: 'win64_msvc2019_64'
         cache: true
-    
-    - name: Setup MSVC
-      uses: microsoft/setup-msbuild@v2
     
     - name: Install vcpkg dependencies
       run: |
